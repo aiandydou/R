@@ -1,0 +1,64 @@
+#通过前面对数据的理解可以了解到，transations data set 的logerror是我们要研究的target variable(response).
+#logerror=log(estimate)-log(true),因此logerror=log(estimate/true),因为log(1)=0。因此我们要用logerror的值和0 比较。
+#如果logerror>0,则说明estime的值比true value 更大；而如果logerror<0,则说明estimate的值比true value更小。
+#然而无论是logerror>0或者<0,我们的目的是要把minimize cost function.所以，除了对logerror这个target variable画图进行分析之外，我们最好还能对
+#abs(logerror)这个值进行画图分析。
+
+###对ggplot2的回顾###
+1.首先要理解ggplot2是一个数据和画图分开的过程，不断地把不同的layer加上去，然后形成我们想要画的图。
+第一层：data
+    即我们要使用的data frame.
+第二层：aesthetics
+    美学层。这里最主要的目的是mapping,确定坐标。
+    aes(x=var1,y=var2)就确定了var1是我要画的图的x轴，var2是我要画的y轴。
+    其中，aes中还可以添加很多参数，如：size,shape,color,alpha,linetype，fill等。但是被定义的参数也是一个variable，所以就会有层级的区别。
+    比如：aex(x=var1,y=var2,color=var3,shape=var4)
+    如果var3是一个continuous variable,那么所画的图的颜色就是根据var3的值不断变化的渐进色。
+    如果var4是一个discrete variable（3 factors），那么所画的点的形状就是根据三种不同的factor而产生的三种不同的形状。
+    当然，size,shape,color,alpha,linetype,fill等等参数也可以在别的layer实现，但是就不会出现不同。例如：我们在geo_() layer设定size=20,fill="green",
+那么所出现的图所有的size=20,填充色也为统一的绿色。
+第三层：geometrics
+    几何图形。通过前两层，我们能设定基本的数据以及一些参数，但是并没有确定到底要画一个几何图形到底是什么样的图。通过这一layer，我们来实现这个目的。通常，
+我们需要画的是：bar plot, scatter plot, line.
+    1.geom_histogram()
+    这个就是画直方图，一般来讲是对单变量的画图。比如我对一个var1感兴趣，想要了解它的分布情况，那就可以用这个来画。geom_histogram(x=logerror,y=..density..)会画logerror，而y轴是
+相应的density，即每组数据占了整体数据的百分之几。当然，也可以用geom_histogram(x=logerror,y=..counts..),y轴就相应的变成了每组数据，到底有多少counts。
+在数据分析过程中，经常会出现绝大部分的数据集中在中间部分的情况。例如在分析income variable的时候，一些billionare和一些0 income的人会占非常少的比例，而
+大部分的收入都集中在2000-5000这个range之中。
+    在处理这种数据的时候首先需要做的是在coord_cartesian() layer中定义xlim参数，这样我们就只观察中间非常集中的那部分的distribution情况。同时要在geom_
+histogram()中把bins定义到比较高的数值，如bins=400,这样的话，我们就能把非常集中的数据分散到400个bin中，然后看相应的趋势。
+        ggplot(data=transactions,aes(x=logerror))+geom_histogram()
+        logerrhis<-ggplot(data=transactions,aes(x=logerror))+geom_histogram(bins = 400,fill='red',color='green')+
+              coord_cartesian(xlim=c(-0.5,0.5))+theme(plot.title = element_text(size = 20,hjust = 0.5),axis.title = 
+              element_text(size=15))+labs(title='Distribution of Logerror',x='Logerror',y='Count')
+        logerrhis
+   
+     2.geom_point()
+     画scatter point图，原理如上。
+     
+     3.geom_bar()
+     画条形图，和histogram比较像。但是里面的stat='identity'必须得定义，否则就是个空图。
+     
+     4.geom_errorbar()
+     eg:aes(ymin=avg-stdev,ymax=avg+stded),没画过，但是估计需要定义ymin和ymax这两个参数。
+     
+     5.geom_line()
+     这个适合画时间序列的图。但是一般需要计算出mean，然后aes(x=time,y=meanvalue)+geom_line()
+第四层：statistics
+    statistics层，有很多内容既可以用geom_来触发（stat_和geom_产生一样的结果），也可以单独来产生。如：stat_smooth(method='lm') 和 
+geom_smooth(method='lm')就会产生一样的结果。
+    当然，stat_() layer中可以画一些变量产生的和统计相关的数据。主要有stat_function(),stat_qq(),stat_summary()。虽然还没用过，但是stat_ layer能画
+一些关于mean,sd等summary信息的图以及qqplot等。
+第五层：facets
+    这个就可以画小图进行对比。采用rows~columns的方式。例如一个variable x有3 factor。
+    facet.grid(.~x) 就会根据3个factor画出三个图形，这三个图形在同一row.
+    facet.grid(x~.)也会根据3个factor画出同样的三个图形。
+第六层：theme
+    这个是所以和数据没有关系的参数的Layer。包括element_text(),element_line(),element_rect()三部分。常见的就是对title的大小，对x轴，y轴字体的大小
+进行调整。如：theme(plot.title=element_text(size=20),axis.title=element_text(size=15))
+    此外，还常见的一个是改title的内容，可以使用：labs(title='...',x='...',y='...')来改。
+第七层：coord
+    对左边机型调整。这一层主要有两个目的：1.对coord的范围进行限定。2.改变x/y 一比一的ratio。
+    coord_cartesian(xlim=c(0.5,1.5))的用法上面已经介绍。
+    coord_fixed(0.055)就改变x轴，y轴一比一的ratio。
+    
