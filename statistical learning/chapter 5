@@ -1,0 +1,122 @@
+library(ISLR)
+library(MASS)
+library(dplyr)
+set.seed(1)
+data(Auto)
+summary(Auto)
+str(Auto)
+head(Auto)
+
+#############################################################################################
+##Validation: randomly split the dataset into 2 parts: the training set and the test
+##set. We use the training set to train the model and predict outcome. Then, we calculate 
+##the test MSE based on the mean((true outcome-predicted outcome)^2). The smaller test MSE,
+##the better the model fits the data.
+############################################################################################
+
+#to get the training data and test data
+sid<-sample(392,196)
+train<-Auto[sid,] #randomly select 192 observations from 392 observations
+test<-Auto[-sid,]
+
+#to fit a linear regression
+lm.fit<-lm(mpg~horsepower,data=train)
+pred<-predict(lm.fit,newdata = test)
+MSE<-mean((test$mpg-pred)^2)
+MSE
+
+#to fit a poly and cubic regression
+lm.fit2<-lm(mpg~poly(horsepower,2),data=train)
+MSE2<-mean((test$mpg-(predict(lm.fit2,newdata = test)))^2)
+MSE2 #quardtic has smaller MSE.
+lm.fit3<-lm(mpg~poly(horsepower,3),data = train)
+MSE3<-mean((test$mpg-(predict(lm.fit3,newdata = test)))^2)
+MSE3 #cubic has similar MSE.
+
+#To fit the model with another seed.
+set.seed(2)
+sid<-sample(392,196)
+train<-Auto[sid,]
+test<-Auto[-sid,]
+lm.fit<-lm(mpg~horsepower,data=train)
+pred<-predict(lm.fit,newdata = test)
+MSE<-mean((test$mpg-pred)^2)
+MSE
+
+
+################################################################################################
+##Leave-one-out cross-validataion
+##cv.glm is used for cv for generalized linear model. K=1 is default.
+##To get a model comparation among different model complexity, we need to write a for loop 
+##and get the test error for the model.
+##############################################################################################
+
+glm.fit<-glm(mpg~horsepower,data=Auto)
+summary(glm.fit) #default family for glm is normal,thus it gives the same result for lm.fit
+lm.fit<-lm(mpg~horsepower,data=Auto)
+summary(lm.fit) 
+
+##to get the LOOCV test error 
+library(boot)
+glm.fit<-glm(mpg~horsepower,data=Auto)
+cv.error<-cv.glm(Auto,glm.fit)#used for K-fold cross-validation for generalized linear model
+                              #data=, glmfit=,cose=,K=
+cv.error$delta# it gives the cross validation error,because the default is K
+
+##to get multiple LOOCV test error for multiple models.
+cv.error<-rep(0,5)
+for (i in 1:5){
+  glm.fit<-glm(mpg~poly(horsepower,i),data = Auto)
+  cv.error[i]<-cv.glm(Auto,glm.fit)$delta[1]
+}
+cv.error
+
+
+#############################################################################################
+##K-fold Cross Validation
+##To get 10-fold cross validation, we need to set K=10. And we would like to see how 10 different
+##models perform. By selecting the minimum test MSE, we could get the appropriate model.
+#############################################################################################
+set.seed(17)
+cv.error.10<-rep(0,10)
+for (i in 1:10){
+  glm.fit<-glm(mpg~poly(horsepower,i),data = Auto)
+  cv.error.10[i]<-cv.glm(Auto,glm.fit,K=10)$delta[1] #[1]is the standard k-fold CV estimate, [2]is the bias-corrected version.
+}
+cv.error.10
+
+##############################################################################################
+##bootstrap method
+##We can create self-defined functions to get the estimates of the parameter of interest.
+##And then 
+##use the boot() function from the boot() library, we could get the estimate and SE for the 
+##parameter.
+#############################################################################################
+
+library(boot)
+#the example in the book
+alpha.fn<-function(data,index){
+  X=data$X[index]
+  Y=data$Y[index]
+  return((var(Y)-cov(X,Y))/(var(X)+var(Y)-2*cov(X,Y)))
+} #to create a function to see how the proportion works.
+alpha.fn(Portfolio,1:100)
+
+set.seed(1)
+alpha.fn(Portfolio,sample(100,100,replace=T))
+
+#use boot() function to produce R=1000 bootstrap to estimate alpha.
+boot(data=Portfolio,alpha.fn,R=1000)
+
+#to create a function to get the coefficient of a model and then use the boot to get the  stat.
+boot.fn<-function(data,index){
+  return(coef(lm(mpg~horsepower,data=data,subset = index)))
+}
+boot.fn(Auto,1:392)
+
+set.seed(1)
+boot.fn(data=Auto,sample(392,392,replace = T)) #第一个sample给出的estimate.
+boot.fn(data = Auto,sample(392,392,replace=T)) #第二个sample给出的estimate.
+boot(Auto,boot.fn,1000) #bootstrap的方法，不但给出系数的估计值，同时还给出各个系数的SE.
+
+summary(lm(mpg~horsepower,data=Auto))$coef
