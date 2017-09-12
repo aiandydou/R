@@ -1,0 +1,5 @@
+There are 4 main commends in tidyr: gather, separate, unite, spread.
+gather: would transfer wide format data frame into long format data frame
+separate: would split one column into two columns
+unite: would combine two columns into one column
+spread: would transfer long format data frame into wide format data frame
