@@ -1,0 +1,134 @@
+```{r setup, include=FALSE}
+suppressMessages(library(dplyr))
+#install.packages('nycflights13')
+library(nycflights13)
+flights
+```
+
+###Choosing columns:select,rename
+```{r}
+flights%>%select(carrier,flight)
+flights%>%select(-month,-day)
+#hide a range of columns
+flights%>%select(-(dep_time:arr_delay))
+
+#hide any column with a matching name
+flights%>%select(-contains('time'))
+
+#pick columns using a character vector of column names
+cols<-c("carrier",'flight','tailnum')
+flights%>%select(one_of(cols)) #give 3 columns:carrier,flight,tailnum
+
+#rename:all columns not mentioned are kept.vs select(): all columns not mentioned are dropped
+flights%>%rename(tail=tailnum)
+```
+
+###filter
+```{r}
+flights%>%filter(dep_time>=600,dep_time<=650)
+flights%>%filter(between(dep_time,600,650))
+flights%>%filter(!is.na(dep_time))
+#slice():filter rows by position
+flights%>%slice(1000:1005)
+
+#Keep the first 3 rows within each group
+flights%>%group_by(month,day)%>%slice(1:3)
+
+#sample three random rows from each group
+flights%>%group_by(month,day)%>%sample_n(3)
+
+#keep three rows from each group with the top dep_delay
+flights%>%group_by(month,day)%>%top_n(3,dep_delay)# the data set is arranged by month_day
+
+#also sort by de_delay within each group
+flights%>%group_by(month,day)%>%top_n(3,dep_delay)%>%arrange(desc(dep_delay))#the data set is arranage by desc(dep_delay)
+
+#unique rows
+flights%>%select(origin,dest)%>%unique()
+flights%>%select(origin,dest)%>%distinct()
+flights%>%select(origin,dest)%>%distinct
+```
+###Adding new variables
+```{r}
+#transmutate only keeps the new variable
+flights%>%transmute(speed=distance/air_time*60)#only gives one column
+```
+example data frame with row names
+```{r}
+mtcars%>%head()
+#add_rownames() turns row names into an explicit variable
+mtcars%>%add_rownames('model')%>%head()#a new variable called model with the vector of rownames
+
+#local data frames
+mtcars%>%tbl_df()
+```
+
+###grouping and counting:summarise,tally,count,group_size,n_groups,ungroup
+```{r}
+#count the number of rows in each group
+flights%>%group_by(month)%>%summarise(cnt=n())
+flights%>%group_by(month)%>%tally()
+flights%>%count(month) #automatically group the month
+```
+```{r}
+flights%>%group_by(month)%>%summarise(cnt=n())%>%arrange(desc(cnt))
+flights%>%group_by(month)%>%tally(sort=T)
+
+#sum over a specific variable instead of simply counting rows
+flights%>%group_by(month)%>%summarise(dist=sum(distance))
+```
+
+```{r}
+flights%>%group_by(month)%>%summarise(con=n())%>%arrange(desc(con))
+
+#tally() and count() have a wt parameter for this purpose
+flights%>%group_by(month)%>%tally(wt=distance)
+flights%>%count(month,wt=distance)
+
+#group_size() returns the counts a vector
+flights%>%group_by(month)%>%group_size()
+
+#n_groups() reports the number of groups
+flights%>%group_by(month)%>%n_groups()
+
+```
+```{r}
+#summarise will remove the group by function
+flights%>%group_by(month,day)%>%summarise(cnt=n())%>%arrange(desc(cnt))%>%print(n=40)
+
+#ungroup() before arranging to arrange across all groups
+flights%>%group_by(month,day)%>%summarise(cnt=n())%>%ungroup()%>%arrange(desc(cnt))
+```
+
+###Creating data frame:data_frame()
+```{r}
+#data_frame() gives local data frame
+data_frame(a=1:6,b=a*2,c="string","d+e"=1)%>%glimpse()
+data.frame(a=1:6,c="string","d+e"=1)%>%glimpse()
+```
+
+###Joining (merging) tables:left_join,right_join,inner_join,full_join,semi_join,anit_join
+```{r}
+a<-data_frame(color=c("green","yellow","red"),num=1:3)
+b<-data_frame(color=c("green","yellow","pink"),size=c('S',"M","L"))
+inner_join(a,b) #common rows from a all colums are shown.
+full_join(a,b)
+left_join(a,b)
+right_join(a,b)
+#semi_join
+semi_join(a,b) #filter 'a' to only show observations that match 'b'
+anti_join(a,b) #filter 'a' to only show observations that don't match 'b'
+#If the matching variables don't have idential names,use by() to solve the problem.
+b<-b%>%rename(col=color)
+inner_join(a,b,by=c('color'="col"))
+```
+
+###Viewing more output: print,view
+```{r}
+flights%>%print(n=15) #see the first 15 rows.
+flights%>%print(n=Inf) #to see all rows
+flights%>%print(width=Inf)#to see all columns
+flights%>%View() #1000 rows and ALL columns
+#set options
+options(dplyr.width=Inf,dplyr.print_min=6)
+```
