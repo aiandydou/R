@@ -1,0 +1,118 @@
+```{r}
+setwd('E:/coding rescources/Kaggle/Zillow_price_prediction')
+library(dplyr)
+library(hflights)
+```
+
+#convert to local data frame
+```{r}
+flights<-tbl_df(hflights)
+flights
+```
+
+#to read the data frame
+```{r}
+data.frame(head(flights,20))
+```
+
+###filter：keep rows matching criteria
+```{r}
+flights[flights$Month==1&flights$DayofMonth==1,]
+filter(flights,Month==1,DayofMonth==1)#discard rownames
+#use pipe for OR codition
+filter(flights,UniqueCarrier=='AA'|UniqueCarrier=='UA')
+filter(flights,UniqueCarrier %in% c('AA','UA'))
+```
+
+###Select:pick column by name
+```{r}
+flights[,c('DepTime','ArrTime')]
+select(flights,DepTime,ArrTime)
+select(flights,Year:DayofMonth,contains('Taxi'),contains('Delay'))
+#We can also use following functions:contains/starts with/ends with/matches
+```
+
+###'Chaining' or 'Pipelining'
+```{r}
+filter(select(flights,UniqueCarrier,DepDelay),DepDelay>60)
+flights%>%select(UniqueCarrier,DepDelay)%>%filter(DepDelay>60)
+
+x1<-1:5;x2<-2:6
+sqrt(sum((x1-x2)^2))
+(x1-x2)^2%>%sum()%>%sqrt()
+```
+
+###Arrange:reorder rows
+```{r}
+flights[order(flights$DepDelay),c('UniqueCarrier','DepDelay')]
+flights%>%select(UniqueCarrier,DepDelay)%>%arrange(DepDelay)
+flights%>%select(UniqueCarrier,DepDelay)%>%arrange(desc(DepDelay))
+```
+
+###mutate:add new variables
+```{r}
+flights$Speed<-flights$Distance/flights$ArrTime*60
+flights[,c("Distance",'ArrTime','Speed')]
+flights%>%mutate(Speed=Distance/ArrTime)
+```
+
+###Summarise:Reduce variables to values
+```{r}
+flights%>%group_by(Dest)%>%summarise(avg_delay=mean(ArrDelay,na.rm=T))
+```
+
+###summarise_each:allows you to apply the same summary function to multiple columns at once
+```{r}
+flights%>%group_by(UniqueCarrier)%>%summarise_each(funs(mean),Cancelled,Diverted)
+flights%>%group_by(UniqueCarrier)%>%summarise_each(funs(min(.,na.rm=TRUE),max(.,na.rm=TRUE)),matches('Delay'))
+
+#n() counts the number of rows in a group
+#n.distinct(vector) counts the number of unique items in that vector.
+flights%>%group_by(Month,DayofMonth)%>%summarise(flight_count=n())%>%arrange(desc(flight_count))
+flights%>%group_by(Month,DayofMonth)%>%tally(sort=T)
+#tally() will give the same result as summarise(  =n())
+
+flights%>%group_by(Dest)%>%summarise(flight_count=n(),plane_count=n_distinct(TailNum))
+#Gouping used without summarising
+#for each destination, show the number of cancelled and not cancelled flights.
+flights%>%group_by(Dest)%>%select(Cancelled)%>%table()%>%head()
+```
+
+
+###Window Functions
+#Takes n inputs and returns n values, includes ranking and ordering functions(min_rank),offset functions(lead,lag), and cummulative aggregates('cummean')
+```{r}
+flights%>%group_by(UniqueCarrier)%>%select(Month,DayofMonth,DepDelay)%>%filter(min_rank(desc(DepDelay))<=2)%>%arrange(UniqueCarrier,desc(DepDelay))
+#calculate which 2 days of the year they had their longest depature delays.
+flights%>%group_by(UniqueCarrier)%>%select(Month,DayofMonth,DepDelay)%>%top_n(2)%>%arrange(UniqueCarrier,desc(DepDelay))#gives the same result as above one
+
+#for each month,calculate the number of flights and the change from the pervious month
+flights%>%group_by(Month)%>%summarise(flight_count=n())%>%mutate(change=flight_count-lag(flight_count))
+flights%>%group_by(Month)%>%tally()%>%mutate(n-lag(n))
+#lag(): the earlier value
+#tally(): this function is the same as summarise( n())
+```
+
+###Some other useful functions
+```{r}
+#randomly sample 5 rows without replacement
+flights%>%sample_n(5)
+#randomly sample a fraction of rows, with replacement
+flights%>%sample_frac(0.25,replace=T)
+glimpse(flights)
+```
+
+###Connecting to Databases
+#Currently supports SQLite,PostgreSQL,MYSQL.MariaDB,BigQuery,MonetDB
+```{r}
+#connent to the database
+#install.packages("RSQLite")
+#library('RSQLite')
+##connect to an SQLite database containing the hflights data
+#my_db<-src_sqlite('my_db.sqlite3')
+##connect to the hflights table in that databse
+#flights_tbl<_tbl(my_db,'hflights')
+##query with data frame
+#flights%>%select(UniqueCarrier,DepDelay)%>%arrange(desc(DepDelay))
+
+```
