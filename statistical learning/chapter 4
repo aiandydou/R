@@ -1,0 +1,56 @@
+library(ISLR)
+library(dplyr)
+names(Smarket)
+summary(Smarket)
+
+cor(Smarket)
+cor(Smarket[,-9])
+attach(Smarket)
+plot(Volume)
+
+#logistic regression
+glm.fit<-glm(Direction~Lag1+Lag2+Lag3+Lag4+Lag5+Volume,data=Smarket,family = binomial)
+summary(glm.fit)
+coef(glm.fit)
+summary(glm.fit)$coef
+Smarket<-Smarket%>%mutate(pred=ifelse(predict(glm.fit,type='response')>0.5,'Up','Down'))
+table(Smarket$pred,Smarket$Direction)#create the confusion matrix
+mean(Smarket$pred==Smarket$Direction) #get the accuracy for training
+
+
+###the complex model###
+train<-filter(Smarket,Year<2005) #training data
+test<-filter(Smarket,Year==2005) #test data
+head(train)
+glm.fit1<-glm(Direction~Lag1+Lag2+Lag3+Lag4+Lag5+Volume,data=train,family = binomial)
+pred1<-predict(glm.fit1,test,type = 'response') #predict for the test data
+tot<-cbind(test,pred1)%>%mutate(pred1=ifelse(pred1>0.5,'Up','Down'))
+accuracy<-mean(tot$Direction==tot$pred1) #calculate the accuracy
+accuracy
+
+
+###the simplifed model###
+glm.fit<-glm(Direction~Lag1+Lag2,data=train,family = binomial)
+glm.prob<-predict(glm.fit,test,type = 'response')#predict the test data
+tot1<-cbind(test,glm.prob)%>%mutate(prob=ifelse(glm.prob>0.5,'Up','Down'))
+accuracy1<-mean(tot1$Direction==tot1$prob)
+accuracy1
+
+
+###LDA###
+library(MASS)
+lda.fit<-lda(Direction~Lag1+Lag2,data=train)
+lda.fit
+summary(glm.fit)
+plot(glm.fit)
+lda.pred<-predict(lda.fit,test)
+names(lda.pred)
+lda.class<-lda.pred$class
+table(lda.class,test$Direction)
+accuracy_lda<-mean(lda.class==test$Direction)
+accuracy_lda
+lda.class
+sum(lda.pred$posterior[,1]>0.5)
+sum(lda.pred$posterior[,1]<=0.5)
+lda.pred$posterior[1:20,1]
+lda.class[1:20]
