@@ -1,0 +1,249 @@
+library(ISLR)
+fix(Hitters)
+names(Hitters)
+dim(Hitters)
+sum(is.na(Hitters$Salary))
+
+Hitters<-na.omit(Hitters)
+dim(Hitters)
+
+
+################################################################################################
+##subset selection:regsubsets()
+##we can use the regsubsets function form the leaps library
+##and make the plot of cp and number of varaibles to select the model with the lowest cp.
+#############################################################################################
+#install.packages('leaps')
+library(leaps)
+regfit.full<-regsubsets(Salary~.,Hitters)
+summary(regfit.full) #the subsets do not have to be nested
+                    #the default gives 8 subsets models
+
+#gives 19 subset models
+regfit.full<-regsubsets(Salary~.,data=Hitters,nvmax=19)
+reg.summary<-summary(regfit.full) 
+names(reg.summary)
+reg.summary$cp
+
+#draw a scatter plot for Cp with different number of variables to select the best number of variables
+#and then to conclude the best model that fits the data
+plot(reg.summary$cp,xlab = 'Number of variables',ylab='Cp')
+plot(reg.summary$rss,xlab='Number of variables',ylab='RSS',type='l')
+plot(reg.summary$bic,xlab = 'Number of variables',ylab = 'BIC')
+points(10,reg.summary$cp[10],pch=20,col='red')
+plot(regfit.full,scale = 'Cp')
+coef(regfit.full,10) #choosing model 10 and see the coef for this model
+plot(reg.summary$adjr2,xlab = 'Number of variables',ylab='Radjusted')
+which.max(reg.summary$adjr2)#the 11-th observation has the largest number of Radjusted2
+points(11,reg.summary$adjr2[11],col='red',cex=2,pch=20)#points() function, we need to have x-axis and y-axis.
+
+#use the default plot() function in regsubsets() function
+plot(regfit.full,scale='Cp')
+plot(regfit.full,scale='r2')
+plot(regfit.full,scale = 'adjr2')
+plot(regfit.full,scale = 'bic')
+
+################################################################################################
+##forward selection and backward selection
+################################################################################################
+regfit.fwd<-regsubsets(Salary~.,data=Hitters,nvmax = 19,method = 'forward')
+summary(regfit.fwd)
+
+regfit.bwd<-regsubsets(Salary~.,data=Hitters,nvmax=19,method='backward')
+summary(regfit.bwd)
+
+################################################################################################
+##validation
+##直接把一半data分成train,一半data分成test，然后计算各个model的test MSE,取MSE最小的model。
+#############################################################################################
+#to split the training data and test data
+set.seed(1)
+train<-sample(c(TRUE,FALSE),nrow(Hitters),rep=T)#sample() function 要求我们从 true/false 两个值中选，选nrow次，每次都是有放回的选法。
+
+test<-(!train)
+
+#to perform the best subset selection for training data
+regfit.best<-regsubsets(Salary~.,data=Hitters[train,],nvmax = 19)
+summary(regfit.best)
+test.mat<-model.matrix(Salary~.,data=Hitters[test,]) #model.matrix() function gives the 'X' matrix from data.
+#to compute MSEs for different models
+val.errors<-rep(NA,19)
+for (i in 1:19){
+  coefi<-coef(regfit.best,id=i)
+  pred<-test.mat[,names(coefi)]%*%coefi #Xt*X
+  val.errors[i]<-mean((Hitters$Salary[test]-pred)^2) #MSE
+}
+val.errors
+which.min(val.errors) #说明第10个model的MSE值最小,这个model最好
+coef(regfit.best,10) 
+
+#to create a predict function for future prediction.
+predict.regsubsets<-function(object,newdata,id,...){
+  form<-as.formula(object$call[[2]])
+  mat<-model.matrix(form,newdata)
+  coefi<-coef(object,id=id)
+  xvars<-names(coefi)
+  mat[,xvars]%*%coefi
+}
+
+#to perform best subset selection for full dataset.
+regfit.best<-regsubsets(Salary~.,data=Hitters,nvmax = 19)
+coef(regfit.best,10) #the best subset selection should be performed for the full dataset rather than the training data.
+
+
+#################################################################################################
+##K-Fold Cross-Validation
+##
+##先建多个model（19），然后把full dataset分成folds(10)。用19个model,predict出每个fold的mse
+##这样就形成了一个10*19的matrix,然后计算19个model在10个fold下的平均MSE。取出最小的MSE，就是
+##我们最合适的model。
+##
+##LOOCV 
+##
+##方法同上，区别只是把K=1
+###############################################################################################
+k<-10
+set.seed(1)
+fold<-sample(1:k,nrow(Hitters),replace = TRUE) #把Hitters这个dataset的observations 分成了K份。
+cv.errors<-matrix(NA,k,19,dimnames = list(NULL,paste(1:19))) #做一个10行，19列的矩阵。
+for (j in 1:k){
+  best.fit<-regsubsets(Salary~.,data = Hitters[fold!=j,],nvmax = 19)
+  for (i in 1:19){
+    pred<-predict(best.fit,Hitters[fold==j,],id=i)
+    cv.errors[j,i]<-mean((Hitters$Salary[fold==j]-pred)^2)
+  }
+}
+cv.errors   #test MSE, for 10 fold and 19 models
+            #这是个10 row,19 col的matrix, 10 row表示10 fold，19 col表示19个model.
+mean.cv.errors<-apply(cv.errors,2,mean) #apply() 这个function是用于matrix中，定义一个matrix,然后选定row/column,然后确定function.
+mean.cv.errors 
+which.min(mean.cv.errors)
+par(mfrow=c(1,1))
+plot(mean.cv.errors,xlab='number of variables',type='b') #从这个图也可以看出来，model中有11个variables时，相应的MSE是最小的。
+coef(regfit.best,11)
+
+
+
+
+##########################################################################################
+##Lasso and Ridge regression
+##
+##Ridge regression: 
+###########################################################################################
+
+install.packages('glmnet')
+library(glmnet)
+
+#首先定义X matrix, Y.
+x<-model.matrix(Salary~.,Hitters)[,-1]  #把原来的data frame 变成了matrix,同时把处理salary这一列
+#的都变成了predictor，同时，自动把 discrete variable变成了dummy.
+y<-Hitters$Salary
+
+#ridge regression
+grid<-10^seq(10,-2,length=100) 
+ridge.mod<-glmnet(x,y,alpha = 0,lambda = grid)#alpha=0 ridge regression ; alpha=1 lasso. 
+names(ridge.mod)
+coef(ridge.mod)
+dim(coef(ridge.mod)) #这是一个20*100的matrix,20row 是指19个slople+1个intercept；100col 是指
+#加了100个lamda,所以就shrinkage 100次，有100个不同的model.
+class(coef(ridge.mod))
+
+#check第50个lamda的情况,相应的系数,以及L2 Norm 的值.
+ridge.mod$lambda[50]
+coef(ridge.mod)[,50]
+L2.50<-sqrt(sum(coef(ridge.mod)[-1,50]^2))
+
+#check第60个lamda值的情况，相应的系数，已经l2 norm的值。
+#和第50个相比，lamda值在不断变小，惩罚变小,约接近OLS的估计情况,参数估计值越来越大，Bias 越来越大，
+#易造成overfitting的问题。
+ridge.mod$lambda[60]
+coef(ridge.mod)[,60]
+L2.60<-sqrt(sum(coef(ridge.mod)[-1,60]^2))
+summary(ridge.mod)
+names(ridge.mod)
+
+#用predict function来预测，当我自己把lamda定义为一定数的时候，产生的参数。
+predict(ridge.mod,s=50,type='coefficients')[1:20,] #预测了在lamda=50时，相应的系数值，就是个调参的过程。
+
+
+#############################################################################################
+##把数据分成trainning.test，用trainning建模，通过test MSE来选合适的model
+#####################################################################################################
+set.seed(1)
+train<-sample(1:nrow(x),nrow(x)/2)
+test<-(-train)
+y.test<-y[test]
+#train a ridge regression in training data.
+ridge.mod<-glmnet(x[train,],y[train],alpha = 0,lambda = grid,thresh = 1e-12)
+
+#predict response with the lasso regrssion built via training data and predict the model
+#in the test data with the lamda=4.
+ridge.pred<-predict(ridge.mod,s=4,newx = x[test,]) #s=4 就是定义lamda=4,
+MSE.4<-mean((ridge.pred-y.test)^2)
+
+#predict response with lasso in the test data with lamda=10^10
+ridge.pred<-predict(ridge.mod,s=10^10,newx = x[test,])
+MSE.Large<-mean((ridge.pred-y.test)^2)
+MSE.Large
+MSE.4 #By comparing the two test MSEs, we found that MSE.4 is smaller, which indicate lasso with
+#tuning parameter=4 fit the test data better.
+
+#predict response with lasso in the test data with lamda=0
+#when lamda=0,则说明我们没有进行任何的处罚，那这个模型等同于lm().是OLS的估计方法
+ridge.pred<-predict(ridge.mod,s=0,newx = x[test,])
+MSE.0<-mean((ridge.pred-y.test)^2)
+MSE.0
+lm<-lm(y~x,subset=train)
+predict(ridge.mod,s=0,exact=T,type='coefficients')[1:20,] #等同于lm() 的prediction.
+
+############################################################################################
+##Use 10 fold cross-validataion to select the appropriate lamda and then confirm the model
+###########################################################################################
+set.seed(1)
+cv.out<-cv.glmnet(x[train,],y[train],alpha=0)
+plot(cv.out)
+bestlam<-cv.out$lambda.min
+bestlam #confirm that when lamda=212, we get the minimum test MSE.
+
+#To do the prediction when lamda=212
+ridge.pred<-predict(ridge.mod,s=bestlam,newx = x[test,])
+MSE.min<-mean((ridge.pred-y.test)^2)
+MSE.min
+MSE.4 #Comparing MSE.4 and MSE.min, we found that MSE.min is samller.
+
+#refit the model in the full data set, and predict the coefficients for the model with the 
+#best lamda.
+out<-glmnet(x,y,alpha = 0) #build the model with full data
+predict(out,type='coefficients',s=bestlam)[1:20,]
+#after reading the coeffiecients,we could find that none of the coefficients goes to 0.
+#And we could confirm that ridge regression does not help with feature selection but shrikage.
+
+
+##########################################################################################
+##Lasso and Ridge regression
+##
+##Lasso: 
+###########################################################################################
+lasso.mod<-glmnet(x[train,],y[train],alpha=1,lambda=grid)
+plot(lasso.mod)
+
+############################################################################################
+##cv for lasso
+##cv.glmnet 就可以使用cross validation的方法了。
+#############################################################################################
+
+set.seed(1)
+cv.out<-cv.glmnet(x[train,],y[train],alpha=1)
+plot(cv.out)
+bestlam<-cv.out$lambda.min
+bestlam #当lamda=17时，会产生最小的MSE.
+lasso.pred<-predict(lasso.mod,s=bestlam,newx = x[test,])
+MSE.min.lasso<-mean((lasso.pred-y[test])^2)
+MSE.min.lasso
+
+#check一下最好的model到底长什么样。
+out<-glmnet(x,y,alpha = 1,lambda = grid)
+lasso.coef<-predict(out,type='coefficients',s=bestlam)[1:20,]
+lasso.coef
+
+#check了lasso的方法之后发现，好多参数的系数变成了0，只有比较重要的变量被保留了下来。
