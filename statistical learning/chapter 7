@@ -1,0 +1,69 @@
+library(ISLR)
+attach(Wage)
+
+##################################################################################################
+##polynomial regression
+##############################################################################################
+
+
+#method 1
+fit<-lm(wage~poly(age,4)) # to fit a polynomial regression using a fourth-degree polynomial
+summary(fit)
+
+#method 2
+fit2<-lm(wage~age+I(age^2)+I(age^3)+I(age^4),data=Wage)
+summary(fit2)
+fit3<-lm(wage~cbind(age,age^2,age^3,age^4),data=Wage)
+summary(fit3)
+
+##to do a prediction
+agelims<-range(age)
+age.grid<-seq(from=agelims[1],to=agelims[2])
+preds<-predict(fit,newdata = list(age=age.grid),se=T)  #make prediction for age 18-80
+se.bands<-cbind(preds$fit+2*preds$se.fit,preds$fit-2*preds$se.fit) #prediction intervals
+
+##plot the data 
+par(mfrow=c(2,2),mar=c(4.5,4.5,1,1),oma=c(0,0,4,0))
+plot(age,wage,xlim=agelims,cex=.5,col='red') #scatter plot,散点图
+title('Degree-4 Polynomial',outer = T)
+lines(age.grid,preds$fit,lwd=2,col='blue')
+matlines(age.grid,se.bands,lwd = 1,col = 'blue',lty = 3)
+
+preds2<-predict(fit2,newdata = list(age=age.grid),se=T)
+max(abs(preds$fit-preds2$fit))
+
+
+##############################################################################################
+##Use ANOVA to compare multiple models
+################################################################################################
+
+fit.1<-lm(wage~age,data=Wage)
+fit.2<-lm(wage~poly(age,2),data=Wage)
+fit.3<-lm(wage~poly(age,3),data=Wage)
+fit.4<-lm(wage~poly(age,4),data=Wage)
+fit.5<-lm(wage~poly(age,5),data=Wage)
+anova(fit.1,fit.2,fit.3,fit.4,fit.5)
+#fit.2 compares with fit.1,fit.3 compares with fit.2,fit.4 compares with fit.3,fit.5 compares with fit.5
+
+coef(summary(fit.5))
+
+##############################################################################################
+##glm() with binary response and polynomial predictors
+###############################################################################################
+
+fit<-glm(I(wage>25)~poly(age,4),data = Wage,family = binomial)
+preds<-predict(fit,newdata = list(age=age.grid),se=T)
+preds$fit   #gives the Xt*beta
+pfit<-exp(preds$fit)/(1+exp(preds$fit)) #probability of E(y=1|x) for each observation.
+se.bands.logit<-cbind(preds$fit+2*preds$se.fit,preds$fit-2*preds$se.fit)
+se.bands<-exp(se.bands.logit)/(1+exp(se.bands.logit))
+
+preds<-predict(fit,newdata = list(age=age.grid),type='response',se=T) #it directly gives the probability.
+
+#make plots
+#plot(age,I(wage>250),xlim=agelims,type = 'n',ylim=c(0,.2))
+#points(jitter(age),I((wage>250)/5),cex=0.5,pch='|',col='red')
+
+table(cut(age,4))
+fit<-lm(wage~cut(age,4),data = Wage)
+summary(fit)
