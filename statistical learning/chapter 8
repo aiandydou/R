@@ -1,0 +1,198 @@
+###############################################################################################
+##Classification Tree: 
+##tree(), training data to build the tree, test data to evaluate the tree
+##use cv to prune the tree: cv.tree( FUN=prune.misclass)
+##Use confusion matrix to calculate the error rate.
+###############################################################################################
+
+library(tree)
+library(ISLR)
+attach(Carseats)
+High<-ifelse(Sales<=8,"No","Yes")
+Carseats<-data.frame(Carseats,High)
+tree.carseats<-tree(High~.-Sales,Carseats)
+summary(tree.carseats) 
+
+#after reading the summary information, we find that the misclassification rate is 9%. the number
+#of terminal nodes is 27. The mean deviance is 0.4575, and we want the deviance as small as possible.
+
+plot(tree.carseats)
+text(tree.carseats,pretty = 0)
+tree.carseats
+
+
+#to split the dataset into training data and test data, we build the tree on training data
+#and evaluate the performance on test data.
+set.seed(2)
+train.id<-sample(1:nrow(Carseats),200)
+train.data<-Carseats[train.id,] #training data
+test.data<-Carseats[-train.id,] #test data
+High.test<-High[-train.id] #define the real test response 
+tree<-tree(High~.-Sales,data=train.data)
+tree.pred<-predict(tree,newdata = test.data,type = 'class')
+table(tree.pred,High.test)
+
+
+#############################################################################################
+##Use cross-validation to define the number of terminal nodes and tuning parameter.
+##Prune the tree with approciate number of terminal nodes.
+############################################################################################
+
+set.seed(3)
+cv.carseats<-cv.tree(tree,FUN = prune.misclass)
+names(cv.carseats)
+#size: number of terminal nodes,dev:cv misclassification error rate,k:cost-complexity parameter
+cv.carseats
+#it shows when size=9, we have the lowest deviance,50.
+
+par(mfrow=c(1,2))
+plot(cv.carseats$size,cv.carseats$dev,type = 'b')
+plot(cv.carseats$k,cv.carseats$dev,type='b')
+#the left plot shows that when the number of terminal nodes=9,we have the lowest deviance.
+#the right plot shows that when the pruning parameter=2, we have the least deviance.
+
+##############################################################################################
+##prune the tree and we find that the test error rate is smaller after pruning the tree.
+##if he number of termial nodes is higher, the accuracy is lower.
+##############################################################################################
+
+#prune the tree
+prune.misclass<-prune.misclass(tree,best=9)
+plot(prune.misclass)
+text(prune.misclass,pretty = 0)
+
+#make prediction and make the confusion matrix.
+tree.pred<-predict(prune.misclass,newdata = test.data,type = 'class')
+confusion.mat<-table(tree.pred,High.test)
+confusion.mat
+accuracy<-(94+60)/(94+24+22+60)
+accuracy
+
+#prune the tree even smaller
+prune.2<-prune.misclass(tree,best=15)
+plot(prune.2)
+text(prune.2)
+#make prediction for this more complex tree and make the confusion matrix.
+tree.pred<-predict(prune.2,newdata = test.data,type='class')
+confusion.mat2<-table(tree.pred,High.test)
+confusion.mat2
+accuracy2<-(86+62)/200
+accuracy2
+
+
+##############################################################################################
+##Regression Tree:
+##tree() to build the most complexed tree
+##cv.tree() to find the appropriate number of terminal nodes
+##prune.tree() to prune the tree
+##Use MSE to calculate the error rate.
+##############################################################################################
+library(MASS)
+set.seed(1)
+sid<-sample(1:nrow(Boston),nrow(Boston)/2)
+train<-Boston[sid,]
+test<-Boston[-sid,]
+tree<-tree(medv~.,data=train)
+summary(tree)
+tree
+head(train)
+plot(tree)
+text(tree)
+
+#cv to select the number of termial nodes.
+cv.boston<-cv.tree(tree)
+which.min(cv.boston$dev)
+plot(cv.boston$size,cv.boston$dev,type='b')
+plot(cv.boston)
+#prune the tree with number of terminal nodes=5.
+prune.boston<-prune.tree(tree,best=5)
+plot(prune.boston)
+text(prune.boston)
+#to predict the response for the test data with unpruned tree
+yhat<-predict(tree,newdata = test)
+boston.test<-Boston[-sid,'medv'] #to find the true value for medv
+MSE<-mean((yhat-boston.test)^2)
+MSE
+
+##############################################################################################
+##Bagging and random forest
+##randomForest():
+##两个最重要的参数：mtry:每次分树的时候，从几个备选predictor中选择。如果从所有的predictor中选择的
+##的话，就是bagging的方法，如果从sqrt(p)中选的话就是random forest的方法。
+##第二个重要的参数是ntree:就是我们一共要用多少个树来ensemble。树越少的话，error值越大；树越多，
+##越不容易出现差错。By default,ntree=500.
+
+
+#install.packages('randomForest')
+library('randomForest')
+set.seed(1)
+str(Boston) #it shows there are 14 variables in total, 13 predictors and 1 response
+
+#############################################################################################
+##bagging
+
+#Use the default number of tree:500.
+
+bag.boston<-randomForest(medv~.,data=train,mtry=13,importance=T,ntree=500)
+#mtry=13 indicates all the predictors are included in this ensamble method(all 13 predictors 
+#are considered in each split), thus it is a bagging method.
+#ntree:指的是随机森林里树的多少，default是500个树。
+yhat.bag<-predict(bag.boston,newdata = test)
+plot(yhat.bag,boston.test) #predicted value vs actual test value
+abline(0,1)
+MSE.bag<-mean((yhat.bag-test[,'medv'])^2)
+MSE.bag
+
+#Use the number of tree=25.With the number of trees decreases, the error increase.
+bag.boston1<-randomForest(medv~.,data=train,mtry=13,importance=T,ntree=25)
+yhat.bag1<-predict(bag.boston1,newdata = test)
+plot(yhat.bag1,boston.test) #predicted value vs actual test value
+abline(0,1)
+MSE.bag<-mean((yhat.bag1-test[,'medv'])^2)
+MSE.bag
+
+################################################################################################
+##randomForest:
+##和bagging的区别就在于mtry=m,而不是p。不是从所有的变量中选择，而是从固定数量的变量中选择。
+################################################################################################
+set.seed(1)
+rf.boston<-randomForest(medv~.,data=train,mtry=6,importance=T)
+importance(rf.boston)
+#InMSE/IncNodePurity的值越大，说明这个变量所包含的variation越多，这个变量就越重要。
+head(train)
+varImpPlot(rf.boston)
+
+#############################################################################################
+##Boosting
+##这个方法有三个参数：number of trees,number of split steps, and tuning parameter.
+#############################################################################################
+#install.packages("gbm")
+library(gbm)
+set.seed(1)
+boost.boston<-gbm(medv~.,data=train,distribution = 'gaussian',n.trees = 5000,interaction.depth = 4)
+#distribution='gaussian',说明这个是个regression的问题
+#n.tree:说明我们一共要建多少个树
+#interaction.dept: 说明我们一共要往下走多少个step.
+#shrinkage parameter: default is 0.001.
+
+
+summary(boost.boston)
+yhat.boost<-predict(boost.boston,newdata = test,n.trees = 5000)
+MSE.boost<-mean((yhat.boost-boston.test)^2)
+MSE.boost
+
+par(mfrow=c(1,2))
+plot(boost.boston,i='rm')
+plot(boost.boston,i='lstat')
+
+#to predict the medv using boosting method.
+yhat.boost<-predict(boost.boston,newdata = test,n.trees = 5000)
+MSE.boost<-mean((yhat.boost-boston.test)^2)
+MSE.boost
+
+#change the shrinkage parameter.
+#Increase the shrinkage parameter would lead to lower MSE.
+boost.boston<-gbm(medv~.,data=train,distribution = 'gaussian',n.trees = 5000,interaction.depth = 4,shrinkage = 0.2,verbose=F)
+yhat.boost<-predict(boost.boston,newdata = test,n.trees = 5000)
+MSE.boost<-mean((yhat.boost-boston.test)^2)
+MSE.boost
